@@ -1,0 +1,181 @@
+package chat;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.ScrollPane;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.BufferedReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+
+import com.google.gson.Gson;
+
+import protocol.ChatDto;
+
+public class ChatClient extends JFrame {
+	
+	private static final String TAG = "ChatClient : "; 
+	private ChatClient chatClient = this;
+	
+	private final static int PORT = 10000;
+	
+	private JButton btnConnect, btnSend;
+	private JTextField tfHost, tfChat;
+	private JTextArea taChatList;
+	private ScrollPane scrollPane;
+	
+	private JPanel topPanel, bottomPanel;
+	
+	private Socket socket;
+	private PrintWriter writer;
+	private BufferedReader reader;
+	
+	private FileWriter fWriter;
+	
+	private boolean isMakeId = false;
+	
+	public ChatClient() {
+		init();
+		setting();
+		batch();
+		listener();
+		setVisible(true);	
+	}
+	
+	private void init() {
+		btnConnect = new JButton("Connect");
+		btnSend = new JButton("Send");
+		tfHost = new JTextField("127.0.0.1", 20);
+		tfChat = new JTextField(20);
+		taChatList = new JTextArea(10, 30);	// row, column
+		scrollPane = new ScrollPane();
+		topPanel = new JPanel();
+		bottomPanel = new JPanel();
+	}
+	
+	private void setting() {
+		setTitle("Chat N:M Client");
+		setSize(500, 350);
+		setLocationRelativeTo(null);
+		taChatList.setBackground(Color.ORANGE);
+		taChatList.setForeground(Color.BLUE);
+	}
+	
+
+	private void batch() {
+		topPanel.add(tfHost);
+		topPanel.add(btnConnect);
+		bottomPanel.add(tfChat);
+		bottomPanel.add(btnSend);
+		scrollPane.add(taChatList);
+		
+		add(topPanel, BorderLayout.NORTH);
+		add(scrollPane, BorderLayout.CENTER);
+		add(bottomPanel, BorderLayout.SOUTH);
+		
+		
+	}
+	
+	private void listener() {
+		btnConnect.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				connect();
+			}
+		});	
+		btnSend.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				send();
+			}
+		});
+
+		addWindowListener(new WindowAdapter() {
+		       public void windowClosing(WindowEvent e) {
+		    	   try {
+					fWriter = new FileWriter("/Users/lee/Desktop/대화로그.txt");
+					String text = taChatList.getText();
+					fWriter.write(text);
+					fWriter.close();
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+		    	   	System.exit(0);
+		       }
+		});
+	}
+	private void connect() {
+		String host = tfHost.getText();
+		try {
+			socket = new Socket(host, PORT);
+			reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			writer = new PrintWriter(socket.getOutputStream(), true);
+			taChatList.append("사용하실 아이디를 입력하세요.\n (생성 방법=ID:사용할 아이디)");
+			tfChat.setText("ID:");
+			tfChat.setFocusable(true);
+			ReaderThread rt = new ReaderThread();
+			rt.start();
+			
+		} catch (Exception e1) {
+			System.out.println(TAG + "Server Connect Error : " + e1.getMessage()) ;
+		} 
+	}
+	private void send() {
+		String[] splitChat = (tfChat.getText()).split(":");
+		ChatDto dto = new ChatDto();
+		String gubun = null;
+		String message = null;
+		if(splitChat.length == 1) {
+			gubun = "MSG";
+			message = splitChat[0];
+		} else if(splitChat.length == 2) {
+			gubun = splitChat[0];
+			message = splitChat[1];
+		}
+		System.out.println(gubun);
+		System.out.println(message);
+		dto.setGubun(gubun);
+		dto.setMsg(message);
+		taChatList.append("[내 메시지 ] " + message + "\n");
+		
+		Gson gson = new Gson();
+		String jsonData = gson.toJson(dto);
+		writer.println(jsonData);
+		
+		tfChat.setText("");
+		tfChat.setFocusable(true);
+	}
+	class ReaderThread extends Thread {
+		// while을 돌면서 서버로 부터 메시지를 받아서 taChtList에 뿌리기
+		@Override
+		public void run() {
+			try {
+				String message = null;
+				while((message = reader.readLine()) != null) {
+					taChatList.append(message + "\n");
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+		}
+	}
+	public static void main(String[] args) {
+		new ChatClient();
+	}
+
+}
